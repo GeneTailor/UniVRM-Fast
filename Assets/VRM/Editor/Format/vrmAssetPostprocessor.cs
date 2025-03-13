@@ -84,19 +84,32 @@ namespace VRM
                 var map = texturePaths
                     .Select(x => x.LoadAsset<Texture>())
                     .ToDictionary(x => new SubAssetKey(x), x => x as UnityEngine.Object);
-                var settings = new ImporterContextSettings();
 
-                // 確実に Dispose するために敢えて再パースしている
-                using (var data = new GlbFileParser(vrmPath).Parse())
-                using (var context = new VRMImporterContext(new VRMData(data), externalObjectMap: map, settings: settings))
+                try
                 {
-                    var editor = new VRMEditorImporterContext(context, prefabPath);
-                    foreach (var textureInfo in context.TextureDescriptorGenerator.Get().GetEnumerable())
+                    AssetDatabase.StartAssetEditing();
+                    var settings = new ImporterContextSettings();
+
+                    // 確実に Dispose するために敢えて再パースしている
+                    using (var data = new GlbFileParser(vrmPath).Parse())
+                    using (var context = new VRMImporterContext(new VRMData(data), externalObjectMap: map, settings: settings))
                     {
-                        TextureImporterConfigurator.Configure(textureInfo, context.TextureFactory.ExternalTextures);
+                        var editor = new VRMEditorImporterContext(context, prefabPath);
+                        foreach (var textureInfo in context.TextureDescriptorGenerator.Get().GetEnumerable())
+                        {
+                            TextureImporterConfigurator.Configure(textureInfo, context.TextureFactory.ExternalTextures);
+                        }
+                        var loaded = context.Load();
+                        editor.SaveAsAsset(loaded);
                     }
-                    var loaded = context.Load();
-                    editor.SaveAsAsset(loaded);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogException(e);
+                }
+                finally
+                {
+                    AssetDatabase.StopAssetEditing();
                 }
 
                 s_MarkerCreatePrefab.End();
