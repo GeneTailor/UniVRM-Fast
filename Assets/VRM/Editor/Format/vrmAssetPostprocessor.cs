@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UniGLTF;
+using Unity.Profiling;
 using UnityEditor;
 using UnityEngine;
 
@@ -10,6 +11,8 @@ namespace VRM
 {
     public class vrmAssetPostprocessor : AssetPostprocessor
     {
+        private static ProfilerMarker s_MarkerCreatePrefab = new ProfilerMarker("Create Prefab");
+
 #if !VRM_STOP_ASSETPOSTPROCESSOR
         static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
@@ -63,6 +66,9 @@ namespace VRM
                 return;
             }
 
+            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+            sw.Start();
+
             /// <summary>
             /// これは EditorApplication.delayCall により呼び出される。
             /// 
@@ -73,6 +79,8 @@ namespace VRM
             /// <value></value>
             Action<IEnumerable<UnityPath>> onCompleted = texturePaths =>
             {
+                s_MarkerCreatePrefab.Begin();
+
                 var map = texturePaths
                     .Select(x => x.LoadAsset<Texture>())
                     .ToDictionary(x => new SubAssetKey(x), x => x as UnityEngine.Object);
@@ -91,6 +99,11 @@ namespace VRM
                     editor.SaveAsAsset(loaded);
                 }
 
+                s_MarkerCreatePrefab.End();
+
+                sw.Stop();
+
+                Debug.Log($"Import complete [importMs={sw.ElapsedMilliseconds}]");
             };
 
             using (var data = new GlbFileParser(vrmPath).Parse())
