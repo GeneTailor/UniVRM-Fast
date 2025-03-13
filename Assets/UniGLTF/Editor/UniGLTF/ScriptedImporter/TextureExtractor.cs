@@ -84,9 +84,22 @@ namespace UniGLTF
             s_MarkerStartExtractTextures.Begin();
 
             var extractor = new TextureExtractor(data, textureDirectory, subAssets);
-            foreach (var param in textureDescriptorGenerator.Get().GetEnumerable())
+            try
             {
-                extractor.Extract(param.SubAssetKey, param);
+                AssetDatabase.StartAssetEditing();
+
+                foreach (var param in textureDescriptorGenerator.Get().GetEnumerable())
+                {
+                    extractor.Extract(param.SubAssetKey, param);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
             }
 
             s_MarkerStartExtractTextures.End();
