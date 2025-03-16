@@ -11,6 +11,7 @@ namespace VRM
 {
     public class vrmAssetPostprocessor : AssetPostprocessor
     {
+        private static ProfilerMarker s_MarkerGlbParsing = new ProfilerMarker("Glb Parsing");
         private static ProfilerMarker s_MarkerCreatePrefab = new ProfilerMarker("Create Prefab");
 
 #if !VRM_STOP_ASSETPOSTPROCESSOR
@@ -69,6 +70,11 @@ namespace VRM
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
             sw.Start();
 
+            s_MarkerGlbParsing.Begin();
+            var gltfData = new GlbFileParser(vrmPath).Parse();
+            var vrmData = new VRMData(gltfData);
+            s_MarkerGlbParsing.End();
+
             /// <summary>
             /// これは EditorApplication.delayCall により呼び出される。
             /// 
@@ -91,8 +97,7 @@ namespace VRM
                     var settings = new ImporterContextSettings();
 
                     // 確実に Dispose するために敢えて再パースしている
-                    using (var data = new GlbFileParser(vrmPath).Parse())
-                    using (var context = new VRMImporterContext(new VRMData(data), externalObjectMap: map, settings: settings))
+                    using (var context = new VRMImporterContext(vrmData, externalObjectMap: map, settings: settings))
                     {
                         var editor = new VRMEditorImporterContext(context, prefabPath);
                         foreach (var textureInfo in context.TextureDescriptorGenerator.Get().GetEnumerable())
@@ -114,13 +119,14 @@ namespace VRM
 
                 s_MarkerCreatePrefab.End();
 
+                gltfData.Dispose();
+
                 sw.Stop();
 
                 Debug.Log($"Import complete [importMs={sw.ElapsedMilliseconds}]");
             };
 
-            using (var data = new GlbFileParser(vrmPath).Parse())
-            using (var context = new VRMImporterContext(new VRMData(data)))
+            using (var context = new VRMImporterContext(vrmData))
             {
                 var editor = new VRMEditorImporterContext(context, prefabPath);
                 // extract texture images
