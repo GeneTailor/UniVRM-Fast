@@ -15,11 +15,16 @@ namespace VRM
         private static ProfilerMarker s_MarkerCreatePrefab = new ProfilerMarker("Create Prefab");
 
 #if !VRM_STOP_ASSETPOSTPROCESSOR
-        static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
+        private const string VrmExtension = ".vrm";
+
+		static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
             foreach (string path in importedAssets)
             {
-                var unityPath = UnityPath.FromUnityPath(path);
+                if (path.FastEndsWith(VrmExtension))
+                    continue;
+
+				var unityPath = UnityPath.FromUnityPath(path);
 
                 if (!unityPath.IsFileExists) {
                     continue;
@@ -32,7 +37,7 @@ namespace VRM
                 }
 
                 var ext = Path.GetExtension(path).ToLower();
-                if (ext == ".vrm")
+                if (ext == VrmExtension)
                 {
                     try
                     {
