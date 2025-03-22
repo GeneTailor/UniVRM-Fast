@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace UniGLTF
@@ -59,5 +60,22 @@ namespace UniGLTF
 
             return (bytes, "image/png");
         }
-    }
+
+		public List<(Texture2D, ColorSpace)> Export(ITextureExportData data)
+		{
+			var exportedTextures = new List<(Texture2D, ColorSpace)>();
+            int numTextures = data.TextureCount;
+            for (var idx = 0; idx < numTextures; ++idx)
+			{
+                SlimTextureExportParam exporting = data.GetSlimTextureExportData(idx);
+				var (texture, isDisposable) = exporting.Creator();
+				if (isDisposable)
+				{
+					data.AddDisposable(texture);
+				}
+				exportedTextures.Add((texture, exporting.ExportColorSpace));
+			}
+			return exportedTextures;
+		}
+	}
 }
