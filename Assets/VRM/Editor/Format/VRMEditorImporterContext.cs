@@ -13,7 +13,7 @@ namespace VRM
         UnityPath m_prefabPath;
         List<UnityPath> m_paths = new List<UnityPath>();
 
-        private static ProfilerMarker s_MarkerLoadingVRM = new ProfilerMarker("Loading VRM");
+        private static ProfilerMarker s_MarkerLoadingVRMImages = new ProfilerMarker("Loading VRM Images");
 
         public ITextureDescriptorGenerator TextureDescriptorGenerator => m_context.TextureDescriptorGenerator;
 
@@ -79,7 +79,7 @@ namespace VRM
         /// </summary>
         public void ConvertAndExtractImages(Action<IEnumerable<UnityPath>> onTextureReloaded)
         {
-            s_MarkerLoadingVRM.Begin();
+            s_MarkerLoadingVRMImages.Begin();
 
             //
             // convert images(metallic roughness, occlusion map)
@@ -87,19 +87,19 @@ namespace VRM
             var task = m_context.LoadMaterialsAsync(new ImmediateCaller());
             if (!task.IsCompleted)
             {
-                s_MarkerLoadingVRM.End();
+                s_MarkerLoadingVRMImages.End();
                 throw new Exception();
             }
             if (task.IsFaulted)
             {
                 if (task.Exception is AggregateException ae && ae.InnerExceptions.Count == 1)
                 {
-                    s_MarkerLoadingVRM.End();
+                    s_MarkerLoadingVRMImages.End();
                     throw ae.InnerException;
                 }
                 else
                 {
-                    s_MarkerLoadingVRM.End();
+                    s_MarkerLoadingVRMImages.End();
                     throw task.Exception;
                 }
             }
@@ -108,7 +108,7 @@ namespace VRM
             var task2 = m_context.ReadMetaAsync(new ImmediateCaller());
             if (!task2.IsCompleted || task2.IsCanceled || task2.IsFaulted)
             {
-                s_MarkerLoadingVRM.End();
+                s_MarkerLoadingVRMImages.End();
                 throw new Exception();
             }
 
@@ -120,7 +120,7 @@ namespace VRM
             var dirName = $"{m_prefabPath.FileNameWithoutExtension}.Textures";
             TextureExtractor.ExtractTextures(m_context.Data, m_prefabPath.Parent.Child(dirName), m_context.TextureDescriptorGenerator, subAssets, (_x, _y) => { }, onTextureReloaded);
 
-            s_MarkerLoadingVRM.End();
+            s_MarkerLoadingVRMImages.End();
         }
 
         void SaveAsAsset(SubAssetKey _, UnityEngine.Object o)

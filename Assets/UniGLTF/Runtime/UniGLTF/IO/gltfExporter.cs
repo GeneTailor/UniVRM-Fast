@@ -3,13 +3,23 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using UniGLTF.MeshUtility;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace UniGLTF
 {
     public class gltfExporter : IDisposable
     {
-        protected ExportingGltfData _data;
+		private static ProfilerMarker s_MarkerPrepExport = new ProfilerMarker("Prep Export");
+		private static ProfilerMarker s_MarkerMaterialExport = new ProfilerMarker("Material Export");
+		private static ProfilerMarker s_MarkerTextureExport = new ProfilerMarker("Texture Export");
+		private static ProfilerMarker s_MarkerMeshExport = new ProfilerMarker("Mesh Export");
+		private static ProfilerMarker s_MarkerNodeAndSkinExport = new ProfilerMarker("Node & Skin Export");
+		private static ProfilerMarker s_MarkerAnimationExport = new ProfilerMarker("Animation Export");
+		private static ProfilerMarker s_MarkerExportExtensions = new ProfilerMarker("Export Extensions");
+		private static ProfilerMarker s_MarkerFixName = new ProfilerMarker("Fix Name");
+
+		protected ExportingGltfData _data;
 
         protected glTF _gltf => _data.Gltf;
 
@@ -231,7 +241,8 @@ namespace UniGLTF
 
         public virtual void Export()
         {
-            if (m_settings.FreezeMesh)
+            s_MarkerPrepExport.Begin();
+			if (m_settings.FreezeMesh)
             {
                 // Transform の回転とスケールを Mesh に適用します。
                 // - BlendShape は現状がbakeされます
@@ -249,19 +260,23 @@ namespace UniGLTF
 
             var uniqueUnityMeshes = new MeshExportList();
             uniqueUnityMeshes.GetInfo(Nodes, m_settings);
+			s_MarkerPrepExport.End();
 
-            #region Materials and Textures
-            ReportProgress("Materials and Textures", 0.2f);
-            Materials = uniqueUnityMeshes.GetUniqueMaterials().ToList();
+			#region Materials and Textures
+			ReportProgress("Materials and Textures", 0.2f);
+            s_MarkerMaterialExport.Begin();
+			Materials = uniqueUnityMeshes.GetUniqueMaterials().ToList();
 
             _textureExporter = new TextureExporter(m_textureSerializer);
 
             _gltf.materials = Materials.Select(x => m_materialExporter.ExportMaterial(x, TextureExporter, m_settings)).ToList();
-            #endregion
+            s_MarkerMaterialExport.End();
+			#endregion
 
-            #region Meshes
-            ReportProgress("Meshes", 0.4f);
-            MeshBlendShapeIndexMap = new Dictionary<Mesh, Dictionary<int, int>>();
+			#region Meshes
+			ReportProgress("Meshes", 0.4f);
+			s_MarkerMeshExport.Begin();
+			MeshBlendShapeIndexMap = new Dictionary<Mesh, Dictionary<int, int>>();
             foreach (var unityMesh in uniqueUnityMeshes)
             {
                 if (!unityMesh.CanExport)
@@ -281,11 +296,13 @@ namespace UniGLTF
                     MeshBlendShapeIndexMap.Add(unityMesh.Mesh, blendShapeIndexMap);
                 }
             }
-            #endregion
+            s_MarkerMeshExport.End();
+			#endregion
 
-            #region Nodes and Skins
-            ReportProgress("Nodes and Skins", 0.8f);
-            var skins = uniqueUnityMeshes
+			#region Nodes and Skins
+			ReportProgress("Nodes and Skins", 0.8f);
+            s_MarkerNodeAndSkinExport.Begin();
+			var skins = uniqueUnityMeshes
                 .SelectMany(x => x.Renderers)
                 .Where(x => x.Item1 is SkinnedMeshRenderer && x.UniqueBones != null)
                 .Select(x => x.Item1 as SkinnedMeshRenderer)
@@ -342,26 +359,35 @@ namespace UniGLTF
                     }
                 }
             }
-            #endregion
+            s_MarkerNodeAndSkinExport.End();
+			#endregion
 
-            if (m_animationExporter != null)
+			if (m_animationExporter != null)
             {
                 ReportProgress("Animations", 0.9f);
-                m_animationExporter.Export(_data, Copy, Nodes);
+                s_MarkerAnimationExport.Begin();
+				m_animationExporter.Export(_data, Copy, Nodes);
+                s_MarkerAnimationExport.End();
             }
 
-            ExportExtensions(m_textureSerializer);
+            s_MarkerExportExtensions.Begin();
+			ExportExtensions(m_textureSerializer);
+            s_MarkerExportExtensions.End();
 
-            // Extension で Texture が増える場合があるので最後に呼ぶ
-            var exported = _textureExporter.Export();
+			// Extension で Texture が増える場合があるので最後に呼ぶ
+			s_MarkerTextureExport.Begin();
+			var exported = _textureExporter.Export();
             for (var exportedTextureIdx = 0; exportedTextureIdx < exported.Count; ++exportedTextureIdx)
             {
                 var (unityTexture, colorSpace) = exported[exportedTextureIdx];
                 GltfTextureExporter.PushGltfTexture(_data, unityTexture, colorSpace, m_textureSerializer);
             }
+            s_MarkerTextureExport.End();
 
-            FixName(_gltf);
-        }
+			s_MarkerFixName.Begin();
+			FixName(_gltf);
+            s_MarkerFixName.End();
+		}
 
         /// <summary>
         /// GlbLowLevelParser.FixNameUnique で付与した Suffix を remove

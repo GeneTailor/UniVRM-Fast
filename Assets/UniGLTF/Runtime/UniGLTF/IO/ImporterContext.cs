@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Threading.Tasks;
 using UnityEngine.Profiling;
+using Unity.Profiling;
 
 namespace UniGLTF
 {
@@ -23,6 +24,8 @@ namespace UniGLTF
         private bool LoadAnimation => _settings.LoadAnimation;
 
         public IReadOnlyDictionary<SubAssetKey, UnityEngine.Object> ExternalObjectMap;
+
+        private static ProfilerMarker s_MarkerImporterContextLoadAsync = new ProfilerMarker("ImporterContext LoadAsync");
 
         /// <summary>
         /// UnityObject の 生成(LoadAsync) と 破棄(Dispose) を行う。
@@ -85,8 +88,11 @@ namespace UniGLTF
         #region Load. Build unity objects
         public virtual async Task<RuntimeGltfInstance> LoadAsync(IAwaitCaller awaitCaller, Func<string, IDisposable> MeasureTime = null)
         {
+            s_MarkerImporterContextLoadAsync.Begin();
+
             if (awaitCaller == null)
             {
+                s_MarkerImporterContextLoadAsync.End();
                 throw new ArgumentNullException();
             }
 
@@ -107,6 +113,7 @@ namespace UniGLTF
                 }
                 if (sb.Any())
                 {
+                    s_MarkerImporterContextLoadAsync.End();
                     throw new UniGLTFNotSupportedException(string.Join(", ", sb) + " is not supported");
                 }
             }
@@ -139,6 +146,7 @@ namespace UniGLTF
             // RuntimeGltfInstance を使う初期化(SpringBone)
             await FinalizeAsync(awaitCaller);
 
+            s_MarkerImporterContextLoadAsync.End();
             return instance;
         }
 
