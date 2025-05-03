@@ -163,7 +163,7 @@ namespace UniGLTF
             var f = new JsonFormatter();
             GltfSerializer.Serialize(f, Gltf);
 
-            var json = f.ToString().ParseAsJson().ToString("  ");
+            var json = f.ToString();//.ParseAsJson().ToString("  ");
 
             json = GltfJsonUtil.FindUsedExtensionsAndUpdateJson(json);
 

@@ -10,7 +10,8 @@ namespace UniGLTF
 {
     public class gltfExporter : IDisposable
     {
-		private static ProfilerMarker s_MarkerPrepExport = new ProfilerMarker("Prep Export");
+        private static ProfilerMarker s_MarkerPrepare = new ProfilerMarker("Prepare");
+        private static ProfilerMarker s_MarkerPrepExport = new ProfilerMarker("Prep Export");
 		private static ProfilerMarker s_MarkerMaterialExport = new ProfilerMarker("Material Export");
 		private static ProfilerMarker s_MarkerTextureExport = new ProfilerMarker("Texture Export");
 		private static ProfilerMarker s_MarkerMeshExport = new ProfilerMarker("Mesh Export");
@@ -108,6 +109,7 @@ namespace UniGLTF
 
         public virtual void Prepare(GameObject go)
         {
+            s_MarkerPrepare.Begin();
             // コピーを作って左手系を右手系に変換する
             Copy = GameObject.Instantiate(go);
             Copy.transform.ReverseRecursive(m_settings.InverseAxis.Create());
@@ -131,6 +133,7 @@ namespace UniGLTF
             }
 
             ReportProgress("prepared", 0.1f);
+            s_MarkerPrepare.End();
         }
 
         public void Dispose()
