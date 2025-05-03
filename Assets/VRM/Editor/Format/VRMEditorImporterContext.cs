@@ -82,7 +82,7 @@ namespace VRM
         /// <summary>
         /// Extract images from glb or gltf out of Assets folder.
         /// </summary>
-        public void ConvertAndExtractImages(Action<IEnumerable<UnityPath>> onTextureReloaded)
+        public void ConvertAndExtractImages(Action<IEnumerable<UnityPath>> onTextureReloaded, Dictionary<string, TextureDescriptor> pathToDescriptor)
         {
             s_MarkerLoadingVRMImages.Begin();
 
@@ -130,7 +130,7 @@ namespace VRM
             var subAssets = m_context.TextureFactory.ConvertedTextures;
             var vrmTextures = new BuiltInVrmMaterialDescriptorGenerator(m_context.VRM);
             var dirName = $"{m_prefabPath.FileNameWithoutExtension}.Textures";
-            TextureExtractor.ExtractTextures(m_context.Data, m_prefabPath.Parent.Child(dirName), m_context.TextureDescriptorGenerator, subAssets, null, onTextureReloaded);
+            TextureExtractor.ExtractTextures(m_context.Data, m_prefabPath.Parent.Child(dirName), m_context.TextureDescriptorGenerator, subAssets, null, onTextureReloaded, pathToDescriptor);
 
             s_MarkerLoadingVRMImages.End();
         }

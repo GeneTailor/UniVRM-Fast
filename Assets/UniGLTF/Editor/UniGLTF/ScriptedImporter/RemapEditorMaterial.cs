@@ -98,8 +98,8 @@ namespace UniGLTF
                 textureDescriptorGenerator,
                 subAssets,
                 addRemap,
-                onCompleted
-            );
+                onCompleted, 
+                null);
         }
 
         public static void ExtractMaterials(ScriptedImporter importer, Func<string, string> materialDir)

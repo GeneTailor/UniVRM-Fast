@@ -1,25 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using UniGLTF;
-using UniGLTF.Utils;
-using Unity.Profiling;
 using UnityEditor;
 using UnityEngine;
+using VRM.Format;
 
 namespace VRM
 {
     public class vrmAssetPostprocessor : AssetPostprocessor
     {
-        private static ProfilerMarker s_MarkerGlbParsing = new ProfilerMarker("Glb Parsing");
-        private static ProfilerMarker s_MarkerCreatePrefab = new ProfilerMarker("Create Prefab");
-		private static ProfilerMarker s_MarkerConfigureTextures = new ProfilerMarker("Configure Textures");
-		private static ProfilerMarker s_MarkerLoadContext = new ProfilerMarker("Load Context");
-		private static ProfilerMarker s_MarkerSaveAsAsset = new ProfilerMarker("Save As Asset");
+        /// <summary>
+        /// Current importing process, don't allow another until this is completely finished.
+        /// </summary>
+        private static VRMAssetImportProcessor currentProcess = null;
 
 #if !VRM_STOP_ASSETPOSTPROCESSOR
-		private const string VrmExtension = ".vrm";
+        private const string VrmExtension = ".vrm";
 
 		static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
@@ -76,84 +72,30 @@ namespace VRM
                 return;
             }
 
-            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
-            sw.Start();
-
-            s_MarkerGlbParsing.Begin();
-            var gltfData = new GlbFileParser(vrmPath).Parse();
-            var vrmData = new VRMData(gltfData);
-            s_MarkerGlbParsing.End();
-
-            /// <summary>
-            /// これは EditorApplication.delayCall により呼び出される。
-            /// 
-            /// * delayCall には UnityEngine.Object 持ち越すことができない
-            /// * vrmPath のみを持ち越す
-            /// 
-            /// </summary>
-            /// <value></value>
-            Action<IEnumerable<UnityPath>> onCompleted = texturePaths =>
+            if (currentProcess != null && !currentProcess.IsFinished)
             {
-                s_MarkerCreatePrefab.Begin();
-
-                var map = texturePaths
-                    .Select(x => x.LoadAsset<Texture>())
-                    .ToDictionary(x => new SubAssetKey(x), x => x as UnityEngine.Object);
-
-                var settings = new ImporterContextSettings();
-
-                // 確実に Dispose するために敢えて再パースしている
-                using (var context = new VRMImporterContext(vrmData, externalObjectMap: map, settings: settings))
-                {
-					var editor = new VRMEditorImporterContext(context, prefabPath);
-					s_MarkerConfigureTextures.Begin();
-                    UnityEditorUtils.AssetEditingBlock(() =>
-                    {
-						foreach (var textureInfo in context.TextureDescriptorGenerator.Get().GetEnumerable())
-						{
-							TextureImporterConfigurator.Configure(textureInfo, context.TextureFactory.ExternalTextures);
-						}
-					});
-					s_MarkerConfigureTextures.End();
-
-					s_MarkerLoadContext.Begin();
-					var loaded = context.Load();
-                    s_MarkerLoadContext.End();
-
-					s_MarkerSaveAsAsset.Begin();
-                    UnityEditorUtils.AssetEditingBlock(() =>
-					{
-					    editor.SaveAsAsset(loaded);
-					});
-					s_MarkerSaveAsAsset.End();
-				}
-
-                s_MarkerCreatePrefab.End();
-
-                gltfData.Dispose();
-
-                sw.Stop();
-
-                Debug.Log($"Import complete [importMs={sw.ElapsedMilliseconds}]");
-            };
-
-            using (var context = new VRMImporterContext(vrmData))
-            {
-                var editor = new VRMEditorImporterContext(context, prefabPath);
-                // extract texture images
-                editor.ConvertAndExtractImages(onCompleted);
+                UniGLTFLogger.Warning($"Unable to import as another import is still in progress folder: {prefabPath}");
+                return;
             }
+
+            currentProcess = new VRMAssetImportProcessor(vrmPath, prefabPath);
+            currentProcess.Start();
         }
 
 		void OnPreprocessTexture()
 		{
-            Debug.Log($"Texture Preprocess [assetPath={assetPath}]");
-
-			/*if (assetPath.Contains("_bumpmap"))
-			{
-				TextureImporter textureImporter = (TextureImporter)assetImporter;
-				textureImporter.convertToNormalmap = true;
-			}*/
-		}
+            if (currentProcess != null)
+            {
+                TextureImporter textureImporter = assetImporter as TextureImporter;
+                if (textureImporter != null)
+                {
+                    currentProcess.OnPreprocessTexture(textureImporter, assetPath, context);
+                }
+                else
+                {
+                    Debug.Log($"Importer is not for Texture [assetPath={assetPath}]");
+                }
+            }
+        }
 	}
 }
