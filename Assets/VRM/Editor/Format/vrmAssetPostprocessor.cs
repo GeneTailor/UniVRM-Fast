@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UniGLTF;
+using UniGLTF.Utils;
 using Unity.Profiling;
 using UnityEditor;
 using UnityEngine;
@@ -106,7 +107,7 @@ namespace VRM
                 {
 					var editor = new VRMEditorImporterContext(context, prefabPath);
 					s_MarkerConfigureTextures.Begin();
-					AssetEditingBlock(() =>
+                    UnityEditorUtils.AssetEditingBlock(() =>
                     {
 						foreach (var textureInfo in context.TextureDescriptorGenerator.Get().GetEnumerable())
 						{
@@ -120,7 +121,7 @@ namespace VRM
                     s_MarkerLoadContext.End();
 
 					s_MarkerSaveAsAsset.Begin();
-					AssetEditingBlock(() =>
+                    UnityEditorUtils.AssetEditingBlock(() =>
 					{
 					    editor.SaveAsAsset(loaded);
 					});
@@ -143,23 +144,6 @@ namespace VRM
                 editor.ConvertAndExtractImages(onCompleted);
             }
         }
-
-		private static void AssetEditingBlock(Action assetsAction)
-		{
-			try
-			{
-				AssetDatabase.StartAssetEditing();
-				assetsAction();
-			}
-			catch (Exception e)
-			{
-				Debug.LogException(e);
-			}
-			finally
-			{
-				AssetDatabase.StopAssetEditing();
-			}
-		}
 
 		void OnPreprocessTexture()
 		{

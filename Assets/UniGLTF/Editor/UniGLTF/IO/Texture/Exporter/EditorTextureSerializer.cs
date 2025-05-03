@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using UniGLTF.Utils;
 using UnityEditor;
 using UnityEngine;
 
@@ -141,29 +142,22 @@ namespace UniGLTF
 		public List<(Texture2D, ColorSpace)> Export(ITextureExportData data)
 		{
 			var exportedTextures = new List<(Texture2D, ColorSpace)>();
-			try
-			{
-				AssetDatabase.StartAssetEditing();
+
+            UnityEditorUtils.AssetEditingBlock(() =>
+            {
                 int numTextures = data.TextureCount;
                 for (var idx = 0; idx < numTextures; ++idx)
                 {
                     SlimTextureExportParam exporting = data.GetSlimTextureExportData(idx);
                     var (texture, isDisposable) = exporting.Creator();
-					if (isDisposable)
-					{
+                    if (isDisposable)
+                    {
                         data.AddDisposable(texture);
-					}
-					exportedTextures.Add((texture, exporting.ExportColorSpace));
-				}
-			}
-			catch (Exception e)
-			{
-				Debug.LogException(e);
-			}
-			finally
-			{
-				AssetDatabase.StopAssetEditing();
-			}
+                    }
+                    exportedTextures.Add((texture, exporting.ExportColorSpace));
+                }
+            });
+
 			return exportedTextures;
 		}
 	}

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using UniGLTF.Utils;
 using Unity.Collections;
 using Unity.Profiling;
 using UnityEditor;
@@ -73,20 +74,11 @@ namespace UniGLTF
 
         private void EnsureFolder()
 		{
-			try
-			{
-				AssetDatabase.StartAssetEditing();
-				m_textureDirectory.EnsureFolder();
-			}
-			catch (Exception e)
-			{
-				Debug.LogException(e);
-			}
-			finally
-			{
-				AssetDatabase.StopAssetEditing();
-			}
-		}
+            UnityEditorUtils.AssetEditingBlock(() =>
+            {
+                m_textureDirectory.EnsureFolder();
+            });
+        }
 
         public static string GetExt(string mime, string uri)
         {
@@ -220,22 +212,13 @@ namespace UniGLTF
 
 		private static void ExtractSequential(ITextureDescriptorGenerator textureDescriptorGenerator, TextureExtractor extractor)
         {
-            try
+            UnityEditorUtils.AssetEditingBlock(() =>
             {
-                AssetDatabase.StartAssetEditing();
-				foreach (var param in textureDescriptorGenerator.Get().GetEnumerable())
+                foreach (var param in textureDescriptorGenerator.Get().GetEnumerable())
                 {
                     extractor.Extract(param.SubAssetKey, param);
                 }
-            }
-            catch (Exception e)
-            {
-                Debug.LogException(e);
-            }
-            finally
-            {
-                AssetDatabase.StopAssetEditing();
-            }
+            });
         }
 
         private static void ExtractThreaded(ITextureDescriptorGenerator textureDescriptorGenerator, TextureExtractor extractor)
@@ -263,23 +246,14 @@ namespace UniGLTF
                 s_MarkerExtractTexturesThreaded_AwaitTasks.End();
 
 				s_MarkerExtractTexturesThreaded_Import.Begin();
-				try
+                UnityEditorUtils.AssetEditingBlock(() =>
                 {
-                    AssetDatabase.StartAssetEditing();
                     // Import asset
-					foreach (var taskData in taskDatas)
+                    foreach (var taskData in taskDatas)
                     {
                         taskData.targetPath.ImportAsset();
                     }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogException(e);
-                }
-                finally
-                {
-                    AssetDatabase.StopAssetEditing();
-                }
+                });
                 s_MarkerExtractTexturesThreaded_Import.End();
 			}
         }
