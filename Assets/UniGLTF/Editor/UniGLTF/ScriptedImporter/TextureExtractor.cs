@@ -62,7 +62,7 @@ namespace UniGLTF
 		private static ProfilerMarker s_MarkerExtractTexturesThreaded_AddTasks = new ProfilerMarker("Threaded - Add Tasks");
 		private static ProfilerMarker s_MarkerExtractTexturesThreaded_AwaitTasks = new ProfilerMarker("Threaded - Await Tasks");
 		private static ProfilerMarker s_MarkerExtractTexturesThreaded_Import = new ProfilerMarker("Threaded - Import");
-		private static ProfilerMarker s_MarkerDelayedExtractTextures = new ProfilerMarker("Delayed Extract Textures");
+		private static ProfilerMarker s_MarkerAddRemapTextures = new ProfilerMarker("Add Remap Textures");
 
         public TextureExtractor(GltfData data, UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets)
         {
@@ -158,23 +158,25 @@ namespace UniGLTF
         {
             TextureExtractor extractor = Extract(data, textureDirectory, subAssets, textureDescriptorGenerator);
 
-			EditorApplication.delayCall += () =>
+            // Wait for the texture assets to be imported
+            EditorApplication.delayCall += () =>
             {
                 Debug.Log("Delayed call");
 
-                s_MarkerDelayedExtractTextures.Begin();
-                // Wait for the texture assets to be imported
-
-                foreach (var (key, targetPath) in extractor.Textures)
+                if (addRemap != null)
                 {
-                    // remap
-                    var externalObject = targetPath.LoadAsset<Texture2D>();
-                    if (externalObject != null)
+                    s_MarkerAddRemapTextures.Begin();
+                    foreach (var (key, targetPath) in extractor.Textures)
                     {
-                        addRemap(key, externalObject);
+                        // remap
+                        var externalObject = targetPath.LoadAsset<Texture2D>();
+                        if (externalObject != null)
+                        {
+                            addRemap(key, externalObject);
+                        }
                     }
+                    s_MarkerAddRemapTextures.End();
                 }
-                s_MarkerDelayedExtractTextures.End();
 
                 if (onCompleted != null)
                 {

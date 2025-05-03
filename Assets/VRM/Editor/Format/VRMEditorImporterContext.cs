@@ -130,7 +130,7 @@ namespace VRM
             var subAssets = m_context.TextureFactory.ConvertedTextures;
             var vrmTextures = new BuiltInVrmMaterialDescriptorGenerator(m_context.VRM);
             var dirName = $"{m_prefabPath.FileNameWithoutExtension}.Textures";
-            TextureExtractor.ExtractTextures(m_context.Data, m_prefabPath.Parent.Child(dirName), m_context.TextureDescriptorGenerator, subAssets, (_x, _y) => { }, onTextureReloaded);
+            TextureExtractor.ExtractTextures(m_context.Data, m_prefabPath.Parent.Child(dirName), m_context.TextureDescriptorGenerator, subAssets, null, onTextureReloaded);
 
             s_MarkerLoadingVRMImages.End();
         }
