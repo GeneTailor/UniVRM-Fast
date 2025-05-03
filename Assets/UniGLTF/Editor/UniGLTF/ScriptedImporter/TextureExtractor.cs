@@ -56,16 +56,37 @@ namespace UniGLTF
         private readonly IReadOnlyDictionary<SubAssetKey, Texture> m_subAssets;
         UnityPath m_textureDirectory;
 
-        private static ProfilerMarker s_MarkerStartExtractTextures = new ProfilerMarker("Start Extract Textures");
-        private static ProfilerMarker s_MarkerDelayedExtractTextures = new ProfilerMarker("Delayed Extract Textures");
+		private static ProfilerMarker s_MarkerCreateTextureExtractor = new ProfilerMarker("Create TextureExtractor");
+		private static ProfilerMarker s_MarkerStartExtractTextures = new ProfilerMarker("Start Extract Textures");
+		private static ProfilerMarker s_MarkerExtractTexturesThreaded_AddTasks = new ProfilerMarker("Threaded - Add Tasks");
+		private static ProfilerMarker s_MarkerExtractTexturesThreaded_AwaitTasks = new ProfilerMarker("Threaded - Await Tasks");
+		private static ProfilerMarker s_MarkerExtractTexturesThreaded_Import = new ProfilerMarker("Threaded - Import");
+		private static ProfilerMarker s_MarkerDelayedExtractTextures = new ProfilerMarker("Delayed Extract Textures");
 
         public TextureExtractor(GltfData data, UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets)
         {
             m_data = data;
             m_textureDirectory = textureDirectory;
-            m_textureDirectory.EnsureFolder();
-            m_subAssets = subAssets;
+			EnsureFolder();
+			m_subAssets = subAssets;
         }
+
+        private void EnsureFolder()
+		{
+			try
+			{
+				AssetDatabase.StartAssetEditing();
+				m_textureDirectory.EnsureFolder();
+			}
+			catch (Exception e)
+			{
+				Debug.LogException(e);
+			}
+			finally
+			{
+				AssetDatabase.StopAssetEditing();
+			}
+		}
 
         public static string GetExt(string mime, string uri)
         {
@@ -143,26 +164,13 @@ namespace UniGLTF
             Action<SubAssetKey, Texture2D> addRemap,
             Action<IEnumerable<UnityPath>> onCompleted = null)
         {
-            s_MarkerStartExtractTextures.Begin();
+            TextureExtractor extractor = Extract(data, textureDirectory, subAssets, textureDescriptorGenerator);
 
-            var extractor = new TextureExtractor(data, textureDirectory, subAssets);
-
-            // Due to overheads of setting up threaded version low core count machines they are likely faster on the non-threaded version
-            if (SystemInfo.processorCount < 4)
+			EditorApplication.delayCall += () =>
             {
-                Extract(textureDescriptorGenerator, extractor);
-            }
-            else
-            {
-                ExtractThreaded(textureDescriptorGenerator, extractor);
-            }
+                Debug.Log("Delayed call");
 
-            s_MarkerStartExtractTextures.End();
-
-            EditorApplication.delayCall += () =>
-            {
                 s_MarkerDelayedExtractTextures.Begin();
-
                 // Wait for the texture assets to be imported
 
                 foreach (var (key, targetPath) in extractor.Textures)
@@ -174,7 +182,6 @@ namespace UniGLTF
                         addRemap(key, externalObject);
                     }
                 }
-
                 s_MarkerDelayedExtractTextures.End();
 
                 if (onCompleted != null)
@@ -184,12 +191,39 @@ namespace UniGLTF
             };
         }
 
-        private static void Extract(ITextureDescriptorGenerator textureDescriptorGenerator, TextureExtractor extractor)
+		private static TextureExtractor Extract(GltfData data, UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets, ITextureDescriptorGenerator textureDescriptorGenerator)
+		{
+			TextureExtractor extractor = CreateExtractor(data, textureDirectory, subAssets);
+
+			s_MarkerStartExtractTextures.Begin();
+			// Due to overheads of setting up threaded version low core count machines they are likely faster on the non-threaded version
+			if (SystemInfo.processorCount < 4)
+			{
+				ExtractSequential(textureDescriptorGenerator, extractor);
+			}
+			else
+			{
+				ExtractThreaded(textureDescriptorGenerator, extractor);
+			}
+			s_MarkerStartExtractTextures.End();
+
+			return extractor;
+		}
+
+		private static TextureExtractor CreateExtractor(GltfData data, UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets)
+        {
+			s_MarkerCreateTextureExtractor.Begin();
+			var extractor = new TextureExtractor(data, textureDirectory, subAssets);
+			s_MarkerCreateTextureExtractor.End();
+            return extractor;
+		}
+
+		private static void ExtractSequential(ITextureDescriptorGenerator textureDescriptorGenerator, TextureExtractor extractor)
         {
             try
             {
                 AssetDatabase.StartAssetEditing();
-                foreach (var param in textureDescriptorGenerator.Get().GetEnumerable())
+				foreach (var param in textureDescriptorGenerator.Get().GetEnumerable())
                 {
                     extractor.Extract(param.SubAssetKey, param);
                 }
@@ -206,16 +240,19 @@ namespace UniGLTF
 
         private static void ExtractThreaded(ITextureDescriptorGenerator textureDescriptorGenerator, TextureExtractor extractor)
         {
-            List<TextureExtractTaskData> taskDatas = new List<TextureExtractTaskData>();
+            s_MarkerExtractTexturesThreaded_AddTasks.Begin();
+			List<TextureExtractTaskData> taskDatas = new List<TextureExtractTaskData>();
             foreach (var param in textureDescriptorGenerator.Get().GetEnumerable())
             {
                 extractor.TryAddTask(param.SubAssetKey, param, taskDatas);
             }
+			s_MarkerExtractTexturesThreaded_AddTasks.End();
 
-            int count = taskDatas.Count;
+			int count = taskDatas.Count;
             if (count > 0)
             {
-                Task[] tasks = new Task[count];
+				s_MarkerExtractTexturesThreaded_AwaitTasks.Begin();
+				Task[] tasks = new Task[count];
                 for (int i = 0; i < count; i++)
                 {
                     tasks[i] = taskDatas[i].task;
@@ -223,12 +260,14 @@ namespace UniGLTF
 
                 // Wait for all the tasks to finish
                 Task.WaitAll(tasks);
+                s_MarkerExtractTexturesThreaded_AwaitTasks.End();
 
-                try
+				s_MarkerExtractTexturesThreaded_Import.Begin();
+				try
                 {
                     AssetDatabase.StartAssetEditing();
                     // Import asset
-                    foreach (var taskData in taskDatas)
+					foreach (var taskData in taskDatas)
                     {
                         taskData.targetPath.ImportAsset();
                     }
@@ -241,7 +280,8 @@ namespace UniGLTF
                 {
                     AssetDatabase.StopAssetEditing();
                 }
-            }
+                s_MarkerExtractTexturesThreaded_Import.End();
+			}
         }
     }
 }
