@@ -13,9 +13,12 @@ namespace VRM
     {
         private static ProfilerMarker s_MarkerGlbParsing = new ProfilerMarker("Glb Parsing");
         private static ProfilerMarker s_MarkerCreatePrefab = new ProfilerMarker("Create Prefab");
+		private static ProfilerMarker s_MarkerConfigureTextures = new ProfilerMarker("Configure Textures");
+		private static ProfilerMarker s_MarkerLoadContext = new ProfilerMarker("Load Context");
+		private static ProfilerMarker s_MarkerSaveAsAsset = new ProfilerMarker("Save As Asset");
 
 #if !VRM_STOP_ASSETPOSTPROCESSOR
-        private const string VrmExtension = ".vrm";
+		private const string VrmExtension = ".vrm";
 
 		static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
@@ -96,31 +99,33 @@ namespace VRM
                     .Select(x => x.LoadAsset<Texture>())
                     .ToDictionary(x => new SubAssetKey(x), x => x as UnityEngine.Object);
 
-                try
-                {
-                    AssetDatabase.StartAssetEditing();
-                    var settings = new ImporterContextSettings();
+                var settings = new ImporterContextSettings();
 
-                    // 確実に Dispose するために敢えて再パースしている
-                    using (var context = new VRMImporterContext(vrmData, externalObjectMap: map, settings: settings))
+                // 確実に Dispose するために敢えて再パースしている
+                using (var context = new VRMImporterContext(vrmData, externalObjectMap: map, settings: settings))
+                {
+					var editor = new VRMEditorImporterContext(context, prefabPath);
+					s_MarkerConfigureTextures.Begin();
+					AssetEditingBlock(() =>
                     {
-                        var editor = new VRMEditorImporterContext(context, prefabPath);
-                        foreach (var textureInfo in context.TextureDescriptorGenerator.Get().GetEnumerable())
-                        {
-                            TextureImporterConfigurator.Configure(textureInfo, context.TextureFactory.ExternalTextures);
-                        }
-                        var loaded = context.Load();
-                        editor.SaveAsAsset(loaded);
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogException(e);
-                }
-                finally
-                {
-                    AssetDatabase.StopAssetEditing();
-                }
+						foreach (var textureInfo in context.TextureDescriptorGenerator.Get().GetEnumerable())
+						{
+							TextureImporterConfigurator.Configure(textureInfo, context.TextureFactory.ExternalTextures);
+						}
+					});
+					s_MarkerConfigureTextures.End();
+
+					s_MarkerLoadContext.Begin();
+					var loaded = context.Load();
+                    s_MarkerLoadContext.End();
+
+					s_MarkerSaveAsAsset.Begin();
+					AssetEditingBlock(() =>
+					{
+					    editor.SaveAsAsset(loaded);
+					});
+					s_MarkerSaveAsAsset.End();
+				}
 
                 s_MarkerCreatePrefab.End();
 
@@ -138,5 +143,33 @@ namespace VRM
                 editor.ConvertAndExtractImages(onCompleted);
             }
         }
-    }
+
+		private static void AssetEditingBlock(Action assetsAction)
+		{
+			try
+			{
+				AssetDatabase.StartAssetEditing();
+				assetsAction();
+			}
+			catch (Exception e)
+			{
+				Debug.LogException(e);
+			}
+			finally
+			{
+				AssetDatabase.StopAssetEditing();
+			}
+		}
+
+		void OnPreprocessTexture()
+		{
+            Debug.Log($"Texture Preprocess [assetPath={assetPath}]");
+
+			/*if (assetPath.Contains("_bumpmap"))
+			{
+				TextureImporter textureImporter = (TextureImporter)assetImporter;
+				textureImporter.convertToNormalmap = true;
+			}*/
+		}
+	}
 }
