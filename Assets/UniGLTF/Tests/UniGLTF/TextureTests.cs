@@ -98,7 +98,7 @@ namespace UniGLTF
                     ;
 
                 // extractor
-                var extractor = new TextureExtractor(data, UnityPath.FromUnityPath(""), textureMap);
+                var extractor = new TextureExtractor(UnityPath.FromUnityPath(""), textureMap);
                 var m = context.TextureDescriptorGenerator.Get().GetEnumerable()
                     .FirstOrDefault(x => x.SubAssetKey.Name == "texture_1.standard");
 

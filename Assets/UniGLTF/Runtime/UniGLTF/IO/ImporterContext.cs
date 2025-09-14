@@ -25,6 +25,10 @@ namespace UniGLTF
 
         public IReadOnlyDictionary<SubAssetKey, UnityEngine.Object> ExternalObjectMap;
 
+        private static ProfilerMarker s_MarkerLoadMaterials_NextFrameIfTimedOut = new ProfilerMarker("LoadMaterialsAsync NextFrameIfTimedOut");
+        private static ProfilerMarker s_MarkerLoadMaterials_MaterialDescriptorGenerator_Get = new ProfilerMarker("LoadMaterialsAsync MaterialDescriptorGenerator.Get");
+        private static ProfilerMarker s_MarkerLoadMaterialsAsync_MaterialFactory_LoadAsync = new ProfilerMarker("LoadMaterialsAsync MaterialFactory.LoadAsync");
+
         private static ProfilerMarker s_MarkerImporterContextLoadAsync = new ProfilerMarker("ImporterContext LoadAsync");
 
         /// <summary>
@@ -310,9 +314,17 @@ namespace UniGLTF
             {
                 for (int i = 0; i < Data.GLTF.materials.Count; ++i)
                 {
+                    s_MarkerLoadMaterials_NextFrameIfTimedOut.Begin();
                     await awaitCaller.NextFrameIfTimedOut();
+                    s_MarkerLoadMaterials_NextFrameIfTimedOut.End();
+
+                    s_MarkerLoadMaterials_MaterialDescriptorGenerator_Get.Begin();
                     var param = MaterialDescriptorGenerator.Get(Data, i);
+                    s_MarkerLoadMaterials_MaterialDescriptorGenerator_Get.End();
+
+                    s_MarkerLoadMaterialsAsync_MaterialFactory_LoadAsync.Begin();
                     await MaterialFactory.LoadAsync(param, TextureFactory.GetTextureAsync, awaitCaller);
+                    s_MarkerLoadMaterialsAsync_MaterialFactory_LoadAsync.End();
                 }
             }
         }

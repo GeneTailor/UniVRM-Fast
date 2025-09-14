@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using UniGLTF;
 using UniGLTF.Utils;
@@ -40,26 +41,38 @@ namespace VRM.Format
 
         public void Start()
         {
-            sw.Start();
-
-            s_MarkerGlbParsing.Begin();
-            gltfData = new GlbFileParser(vrmPath).Parse();
-            vrmData = new VRMData(gltfData);
-            s_MarkerGlbParsing.End();
-
-            pathToDescriptor = new Dictionary<string, TextureDescriptor>();
-
-            using (var initialContext = new VRMImporterContext(vrmData))
+            try
             {
-                var editor = new VRMEditorImporterContext(initialContext, prefabPath);
-                // extract texture images
-                // TODO: Need to handle if there are no textures
-                editor.ConvertAndExtractImages(OnTexturesImportedCallback, pathToDescriptor);
+                sw.Start();
+
+                s_MarkerGlbParsing.Begin();
+                gltfData = new GlbFileParser(vrmPath).Parse();
+                vrmData = new VRMData(gltfData);
+                s_MarkerGlbParsing.End();
+
+                pathToDescriptor = new Dictionary<string, TextureDescriptor>();
+
+                using (var initialContext = new VRMImporterContext(vrmData))
+                {
+                    var editor = new VRMEditorImporterContext(initialContext, prefabPath);
+                    // extract texture images
+                    // TODO: Need to handle if there are no textures
+                    editor.ConvertAndExtractImages(OnTexturesImportedCallback, pathToDescriptor);
+                }
+            }
+            catch (Exception e)
+            {
+                // Catch and log any exceptions so that the process can be aborted cleanly
+                Debug.LogException(e);
+                Abort();
             }
         }
 
         public void OnPreprocessTexture(TextureImporter textureImporter, string assetPath, AssetImportContext context)
         {
+            if (IsFinished)
+                return;
+
             s_MarkerConfigureTextures.Begin();
             if (pathToDescriptor != null && pathToDescriptor.TryGetValue(assetPath, out TextureDescriptor texDesc))
             {
@@ -96,15 +109,6 @@ namespace VRM.Format
             using (var texturesImportedContext = new VRMImporterContext(vrmData, externalObjectMap: map, settings: settings))
             {
                 var editor = new VRMEditorImporterContext(texturesImportedContext, prefabPath);
-                /*s_MarkerConfigureTextures.Begin();
-                UnityEditorUtils.AssetEditingBlock(() =>
-                {
-                    foreach (var textureInfo in texturesImportedContext.TextureDescriptorGenerator.Get().GetEnumerable())
-                    {
-                        TextureImporterConfigurator.Configure(textureInfo, texturesImportedContext.TextureFactory.ExternalTextures);
-                    }
-                });
-                s_MarkerConfigureTextures.End();*/
 
                 s_MarkerLoadContext.Begin();
                 var loaded = texturesImportedContext.Load();
@@ -131,6 +135,17 @@ namespace VRM.Format
 
             Debug.Log($"Import complete [importMs={sw.ElapsedMilliseconds}]");
 
+            // Mark as finished so any new process can be run
+            IsFinished = true;
+        }
+
+        private void Abort()
+        {
+            gltfData.Dispose();
+
+            sw.Stop();
+
+            // Even though aborted mark as finished so that any new process can run
             IsFinished = true;
         }
     }

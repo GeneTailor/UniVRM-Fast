@@ -46,13 +46,6 @@ namespace UniGLTF
 
     public class TextureExtractor
     {
-        const string TextureDirName = "Textures";
-
-        GltfData m_data;
-        public GltfData Data => m_data;
-
-        public glTF GLTF => m_data.GLTF;
-
         public readonly Dictionary<SubAssetKey, UnityPath> Textures = new Dictionary<SubAssetKey, UnityPath>();
         private readonly IReadOnlyDictionary<SubAssetKey, Texture> m_subAssets;
         UnityPath m_textureDirectory;
@@ -64,9 +57,8 @@ namespace UniGLTF
 		private static ProfilerMarker s_MarkerExtractTexturesThreaded_Import = new ProfilerMarker("Threaded - Import");
 		private static ProfilerMarker s_MarkerAddRemapTextures = new ProfilerMarker("Add Remap Textures");
 
-        public TextureExtractor(GltfData data, UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets)
+        public TextureExtractor(UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets)
         {
-            m_data = data;
             m_textureDirectory = textureDirectory;
 			EnsureFolder();
 			m_subAssets = subAssets;
@@ -158,12 +150,12 @@ namespace UniGLTF
         /// <param name="importer"></param>
         /// <param name="dirName"></param>
         /// <param name="onCompleted"></param>
-        public static void ExtractTextures(GltfData data, UnityPath textureDirectory,
+        public static void ExtractTextures(UnityPath textureDirectory,
             ITextureDescriptorGenerator textureDescriptorGenerator, IReadOnlyDictionary<SubAssetKey, Texture> subAssets,
             Action<SubAssetKey, Texture2D> addRemap,
             Action<IEnumerable<UnityPath>> onCompleted = null, Dictionary<string, TextureDescriptor> pathToDescriptor = null)
         {
-            TextureExtractor extractor = Extract(data, textureDirectory, subAssets, textureDescriptorGenerator, pathToDescriptor);
+            TextureExtractor extractor = Extract(textureDirectory, subAssets, textureDescriptorGenerator, pathToDescriptor);
 
             // Wait for the texture assets to be imported
             EditorApplication.delayCall += () =>
@@ -192,9 +184,9 @@ namespace UniGLTF
             };
         }
 
-		private static TextureExtractor Extract(GltfData data, UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets, ITextureDescriptorGenerator textureDescriptorGenerator, Dictionary<string, TextureDescriptor> pathToDescriptor)
+		private static TextureExtractor Extract(UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets, ITextureDescriptorGenerator textureDescriptorGenerator, Dictionary<string, TextureDescriptor> pathToDescriptor)
         {
-			TextureExtractor extractor = CreateExtractor(data, textureDirectory, subAssets);
+			TextureExtractor extractor = CreateExtractor(textureDirectory, subAssets);
 
 			s_MarkerStartExtractTextures.Begin();
 			// Due to overheads of setting up threaded version low core count machines they are likely faster on the non-threaded version
@@ -211,10 +203,10 @@ namespace UniGLTF
 			return extractor;
 		}
 
-		private static TextureExtractor CreateExtractor(GltfData data, UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets)
+		private static TextureExtractor CreateExtractor(UnityPath textureDirectory, IReadOnlyDictionary<SubAssetKey, Texture> subAssets)
         {
 			s_MarkerCreateTextureExtractor.Begin();
-			var extractor = new TextureExtractor(data, textureDirectory, subAssets);
+			var extractor = new TextureExtractor(textureDirectory, subAssets);
 			s_MarkerCreateTextureExtractor.End();
             return extractor;
 		}
