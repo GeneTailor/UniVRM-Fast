@@ -130,6 +130,7 @@ namespace UniGLTF
     ""name"": ""VRM Consortium""
   }},
   ""dependencies"": {{
+    ""com.unity.timeline"": ""1.7.6"",
     ""com.vrmc.gltf"": ""{0}""
   }},
   ""samples"": [
@@ -168,7 +169,10 @@ namespace UniGLTF
     ""name"": ""VRM Consortium""
   }},
   ""dependencies"": {{
-    ""com.unity.modules.animation"": ""1.0.0""
+    ""com.unity.modules.animation"": ""1.0.0"",
+    ""com.unity.modules.imgui"": ""1.0.0"",
+    ""com.unity.modules.imageconversion"": ""1.0.0"",
+    ""com.unity.test-framework"": ""1.4.6""
   }},
   ""samples"": [
     {{

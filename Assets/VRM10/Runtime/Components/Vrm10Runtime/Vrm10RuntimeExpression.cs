@@ -23,9 +23,9 @@ namespace UniVRM10
         public float LookAtOverrideRate { get; private set; }
         public float MouthOverrideRate { get; private set; }
 
-        internal Vrm10RuntimeExpression(Vrm10Instance target, ILookAtEyeDirectionApplicable eyeDirectionApplicable)
+        internal Vrm10RuntimeExpression(Vrm10Instance target, ILookAtEyeDirectionApplicable eyeDirectionApplicable, bool isPrefabInstance)
         {
-            _merger = new ExpressionMerger(target.Vrm.Expression, target.transform);
+            _merger = new ExpressionMerger(target.Vrm.Expression, target.transform, isPrefabInstance);
             _keys = target.Vrm.Expression.Clips
                 .Select(x => target.Vrm.Expression.CreateKey(x.Clip))
                 .ToList();
@@ -51,7 +51,7 @@ namespace UniVRM10
 
         public void Dispose()
         {
-            _merger?.RestoreMaterialInitialValues();
+            _merger?.Dispose();
             _merger = null;
 
             _eyeDirectionApplicable?.Restore();

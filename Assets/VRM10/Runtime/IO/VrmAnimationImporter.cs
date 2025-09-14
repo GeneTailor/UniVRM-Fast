@@ -17,11 +17,11 @@ namespace UniVRM10
         ExpressionInfo[] m_expressions;
         Material m_defaultMaterial;
 
-        public VrmAnimationImporter(GltfData data,
+        public VrmAnimationImporter(VrmAnimationData data,
                 IReadOnlyDictionary<SubAssetKey, UnityEngine.Object> externalObjectMap = null,
                 ITextureDeserializer textureDeserializer = null,
                 IMaterialDescriptorGenerator materialGenerator = null)
-            : base(data, externalObjectMap, textureDeserializer, materialGenerator, new ImporterContextSettings(invertAxis: Axes.X))
+            : base(data.Data, externalObjectMap, textureDeserializer, materialGenerator, new ImporterContextSettings(invertAxis: Axes.X))
         {
             m_vrma = GetExtension(Data);
         }
@@ -104,9 +104,9 @@ namespace UniVRM10
             return default;
         }
 
-        public Dictionary<HumanBodyBones, Transform> GetHumanMap()
+        public List<(Transform, HumanBodyBones)> GetHumanMap()
         {
-            var humanMap = new Dictionary<HumanBodyBones, Transform>();
+            var humanMap = new List<(Transform, HumanBodyBones)>();
             if (m_vrma is UniGLTF.Extensions.VRMC_vrm_animation.VRMC_vrm_animation animation && animation.Humanoid != null)
             {
                 foreach (HumanBodyBones bone in UniGLTF.Utils.CachedEnum.GetValues<HumanBodyBones>())
@@ -114,7 +114,7 @@ namespace UniVRM10
                     var node = GetNodeIndex(animation.Humanoid, bone);
                     if (node.HasValue)
                     {
-                        humanMap.Add(bone, Nodes[node.Value]);
+                        humanMap.Add((Nodes[node.Value], bone));
                     }
                 }
             }
@@ -259,13 +259,11 @@ namespace UniVRM10
             var humanMap = GetHumanMap();
             if (humanMap.Count > 0)
             {
-                var description = AvatarDescription.Create(humanMap);
                 //
                 // avatar
                 //
-                var avatar = description.CreateAvatar(Root.transform);
+                var avatar = HumanoidLoader.BuildHumanAvatarFromMap(Root.transform, humanMap);
                 avatar.name = "Avatar";
-                // AvatarDescription = description;
                 var animator = Root.AddComponent<Animator>();
                 animator.avatar = avatar;
             }

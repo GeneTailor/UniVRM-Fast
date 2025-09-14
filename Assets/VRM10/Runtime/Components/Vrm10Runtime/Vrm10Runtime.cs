@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using UniGLTF;
+using UniGLTF.Utils;
 using UnityEngine;
 
 namespace UniVRM10
@@ -46,14 +49,22 @@ namespace UniVRM10
             }
         }
 
-        public Vrm10Runtime(Vrm10Instance instance, bool useControlRig, IVrm10SpringBoneRuntime springBoneRuntime)
+        IReadOnlyDictionary<Transform, TransformState> _initPose;
+
+        public Vrm10Runtime(Vrm10Instance instance, bool useControlRig, IVrm10SpringBoneRuntime springBoneRuntime,
+            IReadOnlyDictionary<Transform, TransformState> initPose, bool isPrefabInstance)
         {
             if (!Application.isPlaying)
             {
                 UniGLTFLogger.Warning($"{nameof(Vrm10Runtime)} expects runtime behaviour.");
             }
 
+            _initPose = initPose;
             m_instance = instance;
+            if (m_instance == null)
+            {
+                return;
+            }
 
             if (!instance.TryGetBoneTransform(HumanBodyBones.Head, out m_head))
             {
@@ -66,7 +77,7 @@ namespace UniVRM10
             }
             Constraints = instance.GetComponentsInChildren<IVrm10Constraint>();
             LookAt = new Vrm10RuntimeLookAt(instance, instance.Humanoid, ControlRig);
-            Expression = new Vrm10RuntimeExpression(instance, LookAt.EyeDirectionApplicable);
+            Expression = new Vrm10RuntimeExpression(instance, LookAt.EyeDirectionApplicable, isPrefabInstance);
             SpringBone = springBoneRuntime;
         }
 
@@ -121,7 +132,12 @@ namespace UniVRM10
             // 3. Constraints
             foreach (var constraint in Constraints)
             {
-                constraint.Process();
+                if (constraint.ConstraintSource != null)
+                {
+                    constraint.Process(
+                        targetInitState: _initPose[constraint.ConstraintTarget],
+                        sourceInitState: _initPose[constraint.ConstraintSource]);
+                }
             }
 
             if (m_instance.LookAtTargetType == VRM10ObjectLookAt.LookAtTargetTypes.SpecifiedTransform
@@ -140,7 +156,7 @@ namespace UniVRM10
             Expression.Process(eyeDirection);
 
             // 6. SpringBone
-            SpringBone.Process();
+            SpringBone.Process(Time.deltaTime);
         }
     }
 }

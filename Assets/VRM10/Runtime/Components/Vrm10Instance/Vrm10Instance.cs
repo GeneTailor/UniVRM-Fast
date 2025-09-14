@@ -139,7 +139,13 @@ namespace UniVRM10
             {
                 // importer 内で InitializeAsync が呼び出し済み
             }
-            return new Vrm10Runtime(this, useControlRig, m_springBoneRuntime);
+
+            var initPose = RuntimeGltfInstance.SafeGetInitialPose(transform);
+            
+            // NOTE: RuntimeGltfInstanceがないかどうかでPrefabのインスタンスであるか（EditorImportされているか）が判別できる
+            var isPrefabInstance = !GetComponent<RuntimeGltfInstance>();
+
+            return new Vrm10Runtime(this, useControlRig, m_springBoneRuntime, initPose, isPrefabInstance);
         }
 
         public Vrm10Runtime Runtime

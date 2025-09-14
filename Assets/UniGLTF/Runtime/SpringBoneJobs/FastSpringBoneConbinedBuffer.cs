@@ -5,10 +5,12 @@ using Unity.Burst;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UniGLTF.Runtime.Utils;
 using UniGLTF.SpringBoneJobs.Blittables;
 using UniGLTF.SpringBoneJobs.InputPorts;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Jobs;
 using UnityEngine.Profiling;
@@ -23,9 +25,9 @@ namespace UniGLTF.SpringBoneJobs
         // Joint Level
         private NativeArray<BlittableJointImmutable> _logics;
         private NativeArray<BlittableJointMutable> _joints;
-        private NativeArray<Vector3> _prevTails;
-        private NativeArray<Vector3> _currentTails;
-        private NativeArray<Vector3> _nextTails;
+        private NativeArray<float3> _prevTails;
+        private NativeArray<float3> _currentTails;
+        private NativeArray<float3> _nextTails;
         // Spring Level
         private NativeArray<BlittableSpring> _springs;
         // Moodel Level
@@ -39,9 +41,9 @@ namespace UniGLTF.SpringBoneJobs
         // accessor: Joint Level 
         public NativeArray<BlittableJointImmutable> Logics => _logics;
         public NativeArray<BlittableJointMutable> Joints => _joints;
-        public NativeArray<Vector3> PrevTails => _prevTails;
-        public NativeArray<Vector3> CurrentTails => _currentTails;
-        public NativeArray<Vector3> NextTails => _nextTails;
+        public NativeArray<float3> PrevTails => _prevTails;
+        public NativeArray<float3> CurrentTails => _currentTails;
+        public NativeArray<float3> NextTails => _nextTails;
         // accessor: Spring Level
         public NativeArray<BlittableSpring> Springs => _springs;
         // accessor: Model LEvel
@@ -64,9 +66,9 @@ namespace UniGLTF.SpringBoneJobs
             // joint level
             _logics = new NativeArray<BlittableJointImmutable>(logicsCount, Allocator.Persistent);
             _joints = new NativeArray<BlittableJointMutable>(logicsCount, Allocator.Persistent);
-            _prevTails = new NativeArray<Vector3>(logicsCount, Allocator.Persistent);
-            _currentTails = new NativeArray<Vector3>(logicsCount, Allocator.Persistent);
-            _nextTails = new NativeArray<Vector3>(logicsCount, Allocator.Persistent);
+            _prevTails = new NativeArray<float3>(logicsCount, Allocator.Persistent);
+            _currentTails = new NativeArray<float3>(logicsCount, Allocator.Persistent);
+            _nextTails = new NativeArray<float3>(logicsCount, Allocator.Persistent);
             // spring level
             _springs = new NativeArray<BlittableSpring>(springsCount, Allocator.Persistent);
             // model level
@@ -78,11 +80,14 @@ namespace UniGLTF.SpringBoneJobs
             _batchedBufferLogicSizes = batchedBufferLogicSizes;
         }
 
+        /// <summary>
+        /// Job向けに、Lidt[FastSpringBoneBuffer] をひとつの FastSpringBoneCombinedBuffer に統合する
+        /// </summary>
         internal static JobHandle Create(JobHandle handle,
-            LinkedList<FastSpringBoneBuffer> _buffers, out FastSpringBoneCombinedBuffer combined)
+            IReadOnlyList<FastSpringBoneBuffer> buffers, out FastSpringBoneCombinedBuffer combined)
         {
             Profiler.BeginSample("FastSpringBone.ReconstructBuffers.CopyToBatchedBuffers");
-            var batchedBuffers = _buffers.ToArray();
+            var batchedBuffers = buffers.ToArray();
             var batchedBufferLogicSizes = batchedBuffers.Select(buffer => buffer.Logics.Length).ToArray();
             Profiler.EndSample();
 
@@ -92,7 +97,7 @@ namespace UniGLTF.SpringBoneJobs
             var collidersCount = 0;
             var logicsCount = 0;
             var transformsCount = 0;
-            foreach (var buffer in _buffers)
+            foreach (var buffer in buffers)
             {
                 springsCount += buffer.Springs.Length;
                 collidersCount += buffer.Colliders.Length;
@@ -103,7 +108,7 @@ namespace UniGLTF.SpringBoneJobs
 
             // バッファの構築
             Profiler.BeginSample("FastSpringBone.ReconstructBuffers.CreateBuffers");
-            combined = new FastSpringBoneCombinedBuffer(logicsCount, springsCount, _buffers.Count,
+            combined = new FastSpringBoneCombinedBuffer(logicsCount, springsCount, buffers.Count,
                 collidersCount, transformsCount, batchedBuffers, batchedBufferLogicSizes);
             Profiler.EndSample();
 
@@ -245,11 +250,12 @@ namespace UniGLTF.SpringBoneJobs
             public void Execute(int index)
             {
                 var spring = SrcSprings[index];
-                spring.modelIndex = ModelIndex;
-                spring.colliderSpan.startIndex += CollidersOffset;
-                spring.logicSpan.startIndex += LogicsOffset;
-                spring.transformIndexOffset = TransformOffset;
-                DestSprings[index] = spring;
+                DestSprings[index] = new BlittableSpring(
+                    modelIndex: ModelIndex,
+                    colliderSpan: new BlittableSpan(spring.colliderSpan.startIndex + CollidersOffset, spring.colliderSpan.count),
+                    logicSpan: new BlittableSpan(spring.logicSpan.startIndex + LogicsOffset, spring.logicSpan.count),
+                    transformIndexOffset: TransformOffset,
+                    centerTransformIndex: spring.centerTransformIndex);
             }
         }
 
@@ -293,13 +299,16 @@ namespace UniGLTF.SpringBoneJobs
 
             [ReadOnly] public NativeArray<BlittableJointImmutable> Logics;
             [ReadOnly] public NativeArray<BlittableTransform> Transforms;
-            [NativeDisableParallelForRestriction] public NativeSlice<Vector3> CurrentTails;
-            [NativeDisableParallelForRestriction] public NativeSlice<Vector3> PrevTails;
-            [NativeDisableParallelForRestriction] public NativeSlice<Vector3> NextTails;
+            [NativeDisableParallelForRestriction] public NativeSlice<float3> CurrentTails;
+            [NativeDisableParallelForRestriction] public NativeSlice<float3> PrevTails;
+            [NativeDisableParallelForRestriction] public NativeSlice<float3> NextTails;
 
             public void Execute(int springIndex)
             {
                 var spring = Springs[springIndex];
+                var center = spring.centerTransformIndex >= 0
+                    ? Transforms[spring.transformIndexOffset + spring.centerTransformIndex]
+                    : (BlittableTransform?)null;
                 for (int jointIndex = spring.logicSpan.startIndex; jointIndex < spring.logicSpan.EndIndex; ++jointIndex)
                 {
                     if (float.IsNaN(CurrentTails[jointIndex].x))
@@ -317,9 +326,10 @@ namespace UniGLTF.SpringBoneJobs
                         }
 
                         var tail = Transforms[tailIndex];
-                        CurrentTails[jointIndex] = tail.position;
-                        PrevTails[jointIndex] = tail.position;
-                        NextTails[jointIndex] = tail.position;
+                        var tailPos = center.HasValue ? MathHelper.MultiplyPoint3x4(center.Value.worldToLocalMatrix, tail.position) : tail.position;
+                        CurrentTails[jointIndex] = tailPos;
+                        PrevTails[jointIndex] = tailPos;
+                        NextTails[jointIndex] = tailPos;
                     }
                 }
             }

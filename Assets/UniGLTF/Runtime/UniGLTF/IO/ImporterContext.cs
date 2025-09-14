@@ -55,7 +55,7 @@ namespace UniGLTF
             MaterialDescriptorGenerator = materialGenerator ?? MaterialDescriptorGeneratorUtility.GetValidGltfMaterialDescriptorGenerator();
 
             ExternalObjectMap = externalObjectMap ?? new Dictionary<SubAssetKey, UnityEngine.Object>();
-            textureDeserializer = textureDeserializer ?? new UnityTextureDeserializer();
+            textureDeserializer = textureDeserializer ?? new UnityTextureDeserializer(_settings.ImportedTexturesAccessibility);
 
             TextureFactory = new TextureFactory(textureDeserializer, ExternalObjectMap
                 .Where(x => x.Value is Texture)
