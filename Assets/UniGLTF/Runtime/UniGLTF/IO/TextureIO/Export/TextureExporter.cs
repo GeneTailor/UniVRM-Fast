@@ -1,24 +1,28 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 namespace UniGLTF
 {
-    /// <summary>
-    /// glTF にエクスポートする変換方式を蓄えて index を確定させる。
-    /// Exporter の最後で Export() でまとめて変換する。
-    /// </summary>
-    public sealed class TextureExporter : ITextureExporter
+	/// <summary>
+	/// glTF にエクスポートする変換方式を蓄えて index を確定させる。
+	/// Exporter の最後で Export() でまとめて変換する。
+	/// </summary>
+	public sealed class TextureExporter : ITextureExporter, ITextureExportData
     {
-        private readonly ITextureSerializer _textureSerializer;
+		private readonly ITextureSerializer _textureSerializer;
         private readonly List<TextureExportParam> _exportingList = new List<TextureExportParam>();
         private readonly List<UnityEngine.Texture2D> _disposables = new List<UnityEngine.Texture2D>();
+
+        public int TextureCount
+        {
+            get { return _exportingList.Count; }
+        }
 
         public TextureExporter(ITextureSerializer textureSerializer)
         {
             _textureSerializer = textureSerializer;
         }
-
+         
         public void Dispose()
         {
             foreach (var o in _disposables)
@@ -34,29 +38,13 @@ namespace UniGLTF
             }
         }
 
-        private void PushDisposable(UnityEngine.Texture2D disposable)
-        {
-            _disposables.Add(disposable);
-        }
-
         /// <summary>
         /// 実際にテクスチャを変換する
         /// </summary>
         public List<(Texture2D, ColorSpace)> Export()
         {
-            var exportedTextures = new List<(Texture2D, ColorSpace)>();
-            for (var idx = 0; idx < _exportingList.Count; ++idx)
-            {
-                var exporting = _exportingList[idx];
-                var (texture, isDisposable) = exporting.Creator();
-                if (isDisposable)
-                {
-                    PushDisposable(texture);
-                }
-                exportedTextures.Add((texture, exporting.ExportColorSpace));
-            }
-            return exportedTextures;
-        }
+            return _textureSerializer.Export(this);
+		}
 
         public int RegisterExportingAsSRgb(Texture src, bool needsAlpha)
         {
@@ -187,6 +175,17 @@ namespace UniGLTF
         {
             existsIdx = _exportingList.FindIndex(param.EqualsAsKey);
             return existsIdx != -1;
+        }
+
+        public SlimTextureExportParam GetSlimTextureExportData(int index)
+        {
+            TextureExportParam param = _exportingList[index];
+            return new SlimTextureExportParam(param.ExportColorSpace, param.Creator);
+        }
+
+        public void AddDisposable(Texture2D disposable)
+        {
+            _disposables.Add(disposable);
         }
     }
 }

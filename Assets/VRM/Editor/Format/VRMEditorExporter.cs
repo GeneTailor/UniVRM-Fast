@@ -5,12 +5,18 @@ using System.Text;
 using UniGLTF;
 using UniGLTF.MeshUtility;
 using UniGLTF.Utils;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace VRM
 {
     public static class VRMEditorExporter
     {
+        private static ProfilerMarker s_MarkerUniqueNameTransforms = new ProfilerMarker("Unique Name Transforms");
+        private static ProfilerMarker s_MarkerNormalizeBones = new ProfilerMarker("Normalize Bones");
+        private static ProfilerMarker s_MarkerCopyBlendshapes = new ProfilerMarker("Copy Blendshapes");
+        private static ProfilerMarker s_MarkerGLTFToBytes = new ProfilerMarker("GLTF To Bytes");
+
         /// <summary>
         /// Editor向けのエクスポート処理
         /// </summary>
@@ -174,6 +180,7 @@ namespace VRM
             }
 
             {
+                s_MarkerUniqueNameTransforms.Begin();
                 // copy元
                 var getBone = UniHumanoid.Humanoid.Get_GetBoneTransform(exportRoot);
                 var beforeTransforms = exportRoot.GetComponentsInChildren<Transform>(true);
@@ -204,20 +211,24 @@ namespace VRM
                         ForceUniqueName(t, nameCount);
                     }
                 }
+                s_MarkerUniqueNameTransforms.End();
             }
 
             if (settings.PoseFreeze)
             {
+                s_MarkerNormalizeBones.Begin();
                 using (var backup = new VrmGeometryBackup(target))
                 {
 	                // 正規化
 	                VRMBoneNormalizer.Execute(target, settings.ForceTPose, settings.FreezeMeshUseCurrentBlendShapeWeight);
 	            }
+                s_MarkerNormalizeBones.End();
             }
 
             // 元のBlendShapeClipに変更を加えないように複製
             if (target.TryGetComponent<VRMBlendShapeProxy>(out var proxy))
             {
+                s_MarkerCopyBlendshapes.Begin();
                 var copyBlendShapeAvatar = CopyBlendShapeAvatar(proxy.BlendShapeAvatar, settings.ReduceBlendshapeClip);
                 proxy.BlendShapeAvatar = copyBlendShapeAvatar;
 
@@ -230,6 +241,7 @@ namespace VRM
                         ReplaceMesh(target, smr, copyBlendShapeAvatar);
                     }
                 }
+                s_MarkerCopyBlendshapes.End();
             }
 
             // 出力
@@ -244,7 +256,12 @@ namespace VRM
                 exporter.Prepare(target);
                 exporter.Export();
             }
+
+            s_MarkerGLTFToBytes.Begin();
             var bytes = data.ToGlbBytes();
+            s_MarkerGLTFToBytes.End();
+
+            sw.Stop();
             UniGLTFLogger.Log($"Export elapsed {sw.Elapsed}");
             return bytes;
         }

@@ -1,21 +1,30 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using UniGLTF;
 using UnityEditor;
 using UnityEngine;
+using VRM.Format;
 
 namespace VRM
 {
     public class vrmAssetPostprocessor : AssetPostprocessor
     {
+        /// <summary>
+        /// Current importing process, don't allow another until this is completely finished.
+        /// </summary>
+        private static VRMAssetImportProcessor currentProcess = null;
+
 #if !VRM_STOP_ASSETPOSTPROCESSOR
-        static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
+        private const string VrmExtension = ".vrm";
+
+		static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
             foreach (string path in importedAssets)
             {
-                var unityPath = UnityPath.FromUnityPath(path);
+                if (path.FastEndsWith(VrmExtension))
+                    continue;
+
+				var unityPath = UnityPath.FromUnityPath(path);
 
                 if (!unityPath.IsFileExists) {
                     continue;
@@ -28,7 +37,7 @@ namespace VRM
                 }
 
                 var ext = Path.GetExtension(path).ToLower();
-                if (ext == ".vrm")
+                if (ext == VrmExtension)
                 {
                     try
                     {
@@ -63,43 +72,30 @@ namespace VRM
                 return;
             }
 
-            /// <summary>
-            /// これは EditorApplication.delayCall により呼び出される。
-            /// 
-            /// * delayCall には UnityEngine.Object 持ち越すことができない
-            /// * vrmPath のみを持ち越す
-            /// 
-            /// </summary>
-            /// <value></value>
-            Action<IEnumerable<UnityPath>> onCompleted = texturePaths =>
+            if (currentProcess != null && !currentProcess.IsFinished)
             {
-                var map = texturePaths
-                    .Select(x => x.LoadAsset<Texture>())
-                    .ToDictionary(x => new SubAssetKey(x), x => x as UnityEngine.Object);
-                var settings = new ImporterContextSettings();
+                UniGLTFLogger.Warning($"Unable to import as another import is still in progress folder: {prefabPath}");
+                return;
+            }
 
-                // 確実に Dispose するために敢えて再パースしている
-                using (var data = new GlbFileParser(vrmPath).Parse())
-                using (var context = new VRMImporterContext(new VRMData(data), externalObjectMap: map, settings: settings))
+            currentProcess = new VRMAssetImportProcessor(vrmPath, prefabPath);
+            currentProcess.Start();
+        }
+
+		void OnPreprocessTexture()
+		{
+            if (currentProcess != null)
+            {
+                TextureImporter textureImporter = assetImporter as TextureImporter;
+                if (textureImporter != null)
                 {
-                    var editor = new VRMEditorImporterContext(context, prefabPath);
-                    foreach (var textureInfo in context.TextureDescriptorGenerator.Get().GetEnumerable())
-                    {
-                        TextureImporterConfigurator.Configure(textureInfo, context.TextureFactory.ExternalTextures);
-                    }
-                    var loaded = context.Load();
-                    editor.SaveAsAsset(loaded);
+                    currentProcess.OnPreprocessTexture(textureImporter, assetPath, context);
                 }
-
-            };
-
-            using (var data = new GlbFileParser(vrmPath).Parse())
-            using (var context = new VRMImporterContext(new VRMData(data)))
-            {
-                var editor = new VRMEditorImporterContext(context, prefabPath);
-                // extract texture images
-                editor.ConvertAndExtractImages(onCompleted);
+                else
+                {
+                    Debug.Log($"Importer is not for Texture [assetPath={assetPath}]");
+                }
             }
         }
-    }
+	}
 }

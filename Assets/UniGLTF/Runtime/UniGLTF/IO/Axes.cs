@@ -31,12 +31,14 @@ namespace UniGLTF
 
         public Vector3 InvertVector3(Vector3 src)
         {
-            return src.ReverseZ();
+			src.z = -src.z;
+			return src;
         }
 
         public Vector4 InvertVector4(Vector4 src)
         {
-            return src.ReverseZ();
+			src.z = -src.z;
+			return src;
         }
     }
 

@@ -34,7 +34,7 @@ namespace UniGLTF
             {
                 if (GUILayout.Button("Extract Materials And Textures ..."))
                 {
-                    ExtractMaterialsAndTextures(importer, data, textureDescriptorGenerator, textureDir, materialDir);
+                    ExtractMaterialsAndTextures(importer, textureDescriptorGenerator, textureDir, materialDir);
                 }
                 EditorGUILayout.HelpBox("Extract subasset to external object and overwrite remap", MessageType.Info);
             }
@@ -63,7 +63,7 @@ namespace UniGLTF
             }
         }
 
-        void ExtractMaterialsAndTextures(ScriptedImporter self, GltfData data, ITextureDescriptorGenerator textureDescriptorGenerator, Func<string, string> textureDir, Func<string, string> materialDir)
+        void ExtractMaterialsAndTextures(ScriptedImporter self, ITextureDescriptorGenerator textureDescriptorGenerator, Func<string, string> textureDir, Func<string, string> materialDir)
         {
             if (string.IsNullOrEmpty(self.assetPath))
             {
@@ -93,13 +93,12 @@ namespace UniGLTF
             var assetPath = UnityPath.FromUnityPath(self.assetPath);
             var dirName = textureDir(assetPath.Value); // $"{assetPath.FileNameWithoutExtension}.Textures";
             TextureExtractor.ExtractTextures(
-                data,
                 assetPath.Parent.Child(dirName),
                 textureDescriptorGenerator,
                 subAssets,
                 addRemap,
-                onCompleted
-            );
+                onCompleted, 
+                null);
         }
 
         public static void ExtractMaterials(ScriptedImporter importer, Func<string, string> materialDir)

@@ -37,7 +37,7 @@ namespace UniGLTF
             textureImporter.wrapModeV = texDesc.Sampler.WrapModesV;
         }
 
-        private static void Configure(TextureDescriptor texDesc, TextureImporter importer)
+        public static void Configure(TextureDescriptor texDesc, TextureImporter importer)
         {
             switch (texDesc.TextureType)
             {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UniGLTF;
+using Unity.Profiling;
 using UnityEditor;
 using UnityEngine;
 
@@ -12,7 +13,14 @@ namespace VRM
         UnityPath m_prefabPath;
         List<UnityPath> m_paths = new List<UnityPath>();
 
-        public ITextureDescriptorGenerator TextureDescriptorGenerator => m_context.TextureDescriptorGenerator;
+        private static ProfilerMarker s_MarkerLoadingVRMImages = new ProfilerMarker("Loading VRM Images");
+		private static ProfilerMarker s_MarkerLoadingMaterials = new ProfilerMarker("Loading Materials");
+		private static ProfilerMarker s_MarkerShowMeshes = new ProfilerMarker("Show Meshes");
+		private static ProfilerMarker s_MarkerTransferOwnership = new ProfilerMarker("Transfer Ownership");
+		private static ProfilerMarker s_MarkerCreateMainAsset = new ProfilerMarker("Create Main Asset");
+		private static ProfilerMarker s_MarkerImportAssets = new ProfilerMarker("Import Assets");
+
+		public ITextureDescriptorGenerator TextureDescriptorGenerator => m_context.TextureDescriptorGenerator;
 
         public VRMEditorImporterContext(VRMImporterContext context, UnityPath prefabPath)
         {
@@ -74,32 +82,45 @@ namespace VRM
         /// <summary>
         /// Extract images from glb or gltf out of Assets folder.
         /// </summary>
-        public void ConvertAndExtractImages(Action<IEnumerable<UnityPath>> onTextureReloaded)
+        public void ConvertAndExtractImages(Action<IEnumerable<UnityPath>> onTextureReloaded, Dictionary<string, TextureDescriptor> pathToDescriptor)
         {
-            //
-            // convert images(metallic roughness, occlusion map)
-            //
-            var task = m_context.LoadMaterialsAsync(new ImmediateCaller());
+            s_MarkerLoadingVRMImages.Begin();
+
+            s_MarkerLoadingMaterials.Begin();
+			//
+			// convert images(metallic roughness, occlusion map)
+			//
+			var task = m_context.LoadMaterialsAsync(new ImmediateCaller());
             if (!task.IsCompleted)
             {
+                s_MarkerLoadingMaterials.End();
+				s_MarkerLoadingVRMImages.End();
                 throw new Exception();
             }
+
             if (task.IsFaulted)
             {
                 if (task.Exception is AggregateException ae && ae.InnerExceptions.Count == 1)
                 {
+					s_MarkerLoadingMaterials.End();
+					s_MarkerLoadingVRMImages.End();
                     throw ae.InnerException;
                 }
                 else
                 {
+					s_MarkerLoadingMaterials.End();
+					s_MarkerLoadingVRMImages.End();
                     throw task.Exception;
                 }
             }
 
-            // Convert thumbnail image
-            var task2 = m_context.ReadMetaAsync(new ImmediateCaller());
+			s_MarkerLoadingMaterials.End();
+
+			// Convert thumbnail image
+			var task2 = m_context.ReadMetaAsync(new ImmediateCaller());
             if (!task2.IsCompleted || task2.IsCanceled || task2.IsFaulted)
             {
+                s_MarkerLoadingVRMImages.End();
                 throw new Exception();
             }
 
@@ -109,7 +130,9 @@ namespace VRM
             var subAssets = m_context.TextureFactory.ConvertedTextures;
             var vrmTextures = new BuiltInVrmMaterialDescriptorGenerator(m_context.VRM);
             var dirName = $"{m_prefabPath.FileNameWithoutExtension}.Textures";
-            TextureExtractor.ExtractTextures(m_context.Data, m_prefabPath.Parent.Child(dirName), m_context.TextureDescriptorGenerator, subAssets, (_x, _y) => { }, onTextureReloaded);
+            TextureExtractor.ExtractTextures(m_prefabPath.Parent.Child(dirName), m_context.TextureDescriptorGenerator, subAssets, null, onTextureReloaded, pathToDescriptor);
+
+            s_MarkerLoadingVRMImages.End();
         }
 
         void SaveAsAsset(SubAssetKey _, UnityEngine.Object o)
@@ -136,21 +159,26 @@ namespace VRM
 
         public void SaveAsAsset(UniGLTF.RuntimeGltfInstance loaded)
         {
-            loaded.ShowMeshes();
+            s_MarkerShowMeshes.Begin();
+			loaded.ShowMeshes();
+            s_MarkerShowMeshes.End();
 
-            //
-            // save sub assets
-            //
-            m_paths.Clear();
+			s_MarkerTransferOwnership.Begin();
+			//
+			// save sub assets
+			//
+			m_paths.Clear();
             m_paths.Add(m_prefabPath);
             loaded.TransferOwnership(SaveAsAsset);
             var root = loaded.Root;
 
-            // Remove RuntimeGltfInstance component before saving as a prefab.
-            UnityObjectDestroyer.DestroyRuntimeOrEditor(loaded);
+			// Remove RuntimeGltfInstance component before saving as a prefab.
+			UnityObjectDestroyer.DestroyRuntimeOrEditor(loaded);
+			s_MarkerTransferOwnership.End();
 
-            // Create or update Main Asset
-            if (m_prefabPath.IsFileExists)
+            s_MarkerCreateMainAsset.Begin();
+			// Create or update Main Asset
+			if (m_prefabPath.IsFileExists)
             {
                 UniGLTFLogger.Log($"replace prefab: {m_prefabPath}");
                 var prefab = m_prefabPath.LoadAsset<GameObject>();
@@ -164,11 +192,14 @@ namespace VRM
 
             // destroy GameObject on scene
             UnityObjectDestroyer.DestroyRuntimeOrEditor(root);
+            s_MarkerCreateMainAsset.End();
 
-            foreach (var x in m_paths)
+            s_MarkerImportAssets.Begin();
+			foreach (var x in m_paths)
             {
                 x.ImportAsset();
             }
-        }
+            s_MarkerImportAssets.End();
+		}
     }
 }

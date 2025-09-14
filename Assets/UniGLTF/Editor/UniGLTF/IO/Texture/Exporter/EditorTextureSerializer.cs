@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using UniGLTF.Utils;
 using UnityEditor;
 using UnityEngine;
 
@@ -136,5 +138,27 @@ namespace UniGLTF
                     throw new ArgumentOutOfRangeException(nameof(colorSpace), colorSpace, null);
             }
         }
-    }
+
+		public List<(Texture2D, ColorSpace)> Export(ITextureExportData data)
+		{
+			var exportedTextures = new List<(Texture2D, ColorSpace)>();
+
+            UnityEditorUtils.AssetEditingBlock(() =>
+            {
+                int numTextures = data.TextureCount;
+                for (var idx = 0; idx < numTextures; ++idx)
+                {
+                    SlimTextureExportParam exporting = data.GetSlimTextureExportData(idx);
+                    var (texture, isDisposable) = exporting.Creator();
+                    if (isDisposable)
+                    {
+                        data.AddDisposable(texture);
+                    }
+                    exportedTextures.Add((texture, exporting.ExportColorSpace));
+                }
+            });
+
+			return exportedTextures;
+		}
+	}
 }

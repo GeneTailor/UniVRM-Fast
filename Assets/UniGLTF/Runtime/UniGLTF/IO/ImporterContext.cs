@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Threading.Tasks;
 using UnityEngine.Profiling;
+using Unity.Profiling;
 
 namespace UniGLTF
 {
@@ -23,6 +24,12 @@ namespace UniGLTF
         private bool LoadAnimation => _settings.LoadAnimation;
 
         public IReadOnlyDictionary<SubAssetKey, UnityEngine.Object> ExternalObjectMap;
+
+        private static ProfilerMarker s_MarkerLoadMaterials_NextFrameIfTimedOut = new ProfilerMarker("LoadMaterialsAsync NextFrameIfTimedOut");
+        private static ProfilerMarker s_MarkerLoadMaterials_MaterialDescriptorGenerator_Get = new ProfilerMarker("LoadMaterialsAsync MaterialDescriptorGenerator.Get");
+        private static ProfilerMarker s_MarkerLoadMaterialsAsync_MaterialFactory_LoadAsync = new ProfilerMarker("LoadMaterialsAsync MaterialFactory.LoadAsync");
+
+        private static ProfilerMarker s_MarkerImporterContextLoadAsync = new ProfilerMarker("ImporterContext LoadAsync");
 
         /// <summary>
         /// UnityObject の 生成(LoadAsync) と 破棄(Dispose) を行う。
@@ -85,8 +92,11 @@ namespace UniGLTF
         #region Load. Build unity objects
         public virtual async Task<RuntimeGltfInstance> LoadAsync(IAwaitCaller awaitCaller, Func<string, IDisposable> MeasureTime = null)
         {
+            s_MarkerImporterContextLoadAsync.Begin();
+
             if (awaitCaller == null)
             {
+                s_MarkerImporterContextLoadAsync.End();
                 throw new ArgumentNullException();
             }
 
@@ -107,6 +117,7 @@ namespace UniGLTF
                 }
                 if (sb.Any())
                 {
+                    s_MarkerImporterContextLoadAsync.End();
                     throw new UniGLTFNotSupportedException(string.Join(", ", sb) + " is not supported");
                 }
             }
@@ -139,6 +150,7 @@ namespace UniGLTF
             // RuntimeGltfInstance を使う初期化(SpringBone)
             await FinalizeAsync(awaitCaller);
 
+            s_MarkerImporterContextLoadAsync.End();
             return instance;
         }
 
@@ -302,9 +314,17 @@ namespace UniGLTF
             {
                 for (int i = 0; i < Data.GLTF.materials.Count; ++i)
                 {
+                    s_MarkerLoadMaterials_NextFrameIfTimedOut.Begin();
                     await awaitCaller.NextFrameIfTimedOut();
+                    s_MarkerLoadMaterials_NextFrameIfTimedOut.End();
+
+                    s_MarkerLoadMaterials_MaterialDescriptorGenerator_Get.Begin();
                     var param = MaterialDescriptorGenerator.Get(Data, i);
+                    s_MarkerLoadMaterials_MaterialDescriptorGenerator_Get.End();
+
+                    s_MarkerLoadMaterialsAsync_MaterialFactory_LoadAsync.Begin();
                     await MaterialFactory.LoadAsync(param, TextureFactory.GetTextureAsync, awaitCaller);
+                    s_MarkerLoadMaterialsAsync_MaterialFactory_LoadAsync.End();
                 }
             }
         }

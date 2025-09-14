@@ -6,6 +6,7 @@ using UniGLTF;
 using UniGLTF.M17N;
 using System.IO;
 using UniGLTF.MeshUtility;
+using Unity.Profiling;
 
 namespace VRM
 {
@@ -19,8 +20,10 @@ namespace VRM
             window.Show();
         }
 
+		private static ProfilerMarker s_MarkerGenerateVRM = new ProfilerMarker("Generate VRM");
+		private static ProfilerMarker s_MarkerWriteVRM = new ProfilerMarker("Write VRM");
 
-        enum Tabs
+		enum Tabs
         {
             Meta,
             Mesh,
@@ -258,16 +261,27 @@ namespace VRM
 
         protected override void ExportPath(string path)
         {
-            var bytes = VRMEditorExporter.Export(State.ExportRoot, Meta != null ? Meta : m_tmpMeta, m_settings);
+			System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+			sw.Start();
 
-            File.WriteAllBytes(path, bytes);
+			s_MarkerGenerateVRM.Begin();
+			var bytes = VRMEditorExporter.Export(State.ExportRoot, Meta != null ? Meta : m_tmpMeta, m_settings);
+			s_MarkerGenerateVRM.End();
 
-            if (path.StartsWithUnityAssetPath())
+			s_MarkerWriteVRM.Begin();
+			File.WriteAllBytes(path, bytes);
+            s_MarkerWriteVRM.End();
+
+			if (path.StartsWithUnityAssetPath())
             {
                 // 出力ファイルのインポートを発動
                 AssetDatabase.ImportAsset(path.ToUnityRelativePath());
             }
-        }
+
+			sw.Stop();
+
+			Debug.Log($"Export complete [exportMs={sw.ElapsedMilliseconds}]");
+		}
 
         bool DrawWizardGUI()
         {
